@@ -108,7 +108,18 @@ NSString * AFPercentEscapedStringFromString(NSString *string) {
         return [NSString stringWithFormat:@"%@=%@", AFPercentEscapedStringFromString([self.field description]), AFPercentEscapedStringFromString([self.value description])];
     }
 }
-
+- (NSString *)URLEncodedStringValue:(NSStringEncoding)encode {
+        if (!self.value || [self.value isEqual:[NSNull null]]) {
+            return AFPercentEscapedStringFromString([self.field description]);
+        } else {
+            if (encode == NSUTF8StringEncoding) {
+                return [NSString stringWithFormat:@"%@=%@", AFPercentEscapedStringFromString([self.field description]), AFPercentEscapedStringFromString([self.value description])];
+            } else {
+                
+                return [NSString stringWithFormat:@"%@=%@", [self.field stringByAddingPercentEscapesUsingEncoding:encode], [self.value stringByAddingPercentEscapesUsingEncoding:encode]];
+            }
+        }
+    }
 @end
 
 #pragma mark -
@@ -124,7 +135,14 @@ NSString * AFQueryStringFromParameters(NSDictionary *parameters) {
 
     return [mutablePairs componentsJoinedByString:@"&"];
 }
+NSString * AFQueryStringFromParametersWithEncoding(NSDictionary *parameters, NSStringEncoding encode) {
+    NSMutableArray *mutablePairs = [NSMutableArray array];
+    for (AFQueryStringPair *pair in AFQueryStringPairsFromDictionary(parameters)) {
+        [mutablePairs addObject:[pair URLEncodedStringValue:encode]];
+    }
 
+    return [mutablePairs componentsJoinedByString:@"&"];
+}
 NSArray * AFQueryStringPairsFromDictionary(NSDictionary *dictionary) {
     return AFQueryStringPairsFromKeyAndValue(nil, dictionary);
 }
@@ -469,7 +487,7 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark - AFURLRequestSerialization
-
+/*
 - (NSURLRequest *)requestBySerializingRequest:(NSURLRequest *)request
                                withParameters:(id)parameters
                                         error:(NSError *__autoreleasing *)error
@@ -523,6 +541,65 @@ forHTTPHeaderField:(NSString *)field
 
     return mutableRequest;
 }
+*/
+- (NSURLRequest *)requestBySerializingRequest:(NSURLRequest *)request
+                                   withParameters:(id)parameters
+                                            error:(NSError *__autoreleasing *)error
+    {
+        NSParameterAssert(request);
+
+        NSMutableURLRequest *mutableRequest = [request mutableCopy];
+
+        [self.HTTPRequestHeaders enumerateKeysAndObjectsUsingBlock:^(id field, id value, BOOL * __unused stop) {
+            if (![request valueForHTTPHeaderField:field]) {
+                [mutableRequest setValue:value forHTTPHeaderField:field];
+            }
+        }];
+
+        NSString *query = nil;
+        if (parameters) {
+            if (self.queryStringSerialization) {
+                NSError *serializationError;
+                query = self.queryStringSerialization(request, parameters, &serializationError);
+
+                if (serializationError) {
+                    if (error) {
+                        *error = serializationError;
+                    }
+
+                    return nil;
+                }
+            } else {
+                switch (self.queryStringSerializationStyle) {
+                    case AFHTTPRequestQueryStringDefaultStyle:
+                        if (self.stringEncoding == NSUTF8StringEncoding) {
+                            query = AFQueryStringFromParameters(parameters);
+                        } else {
+                            query = AFQueryStringFromParametersWithEncoding(parameters, self.stringEncoding);
+                        }
+                        
+                        break;
+                }
+            }
+        }
+
+        if ([self.HTTPMethodsEncodingParametersInURI containsObject:[[request HTTPMethod] uppercaseString]]) {
+            if (query && query.length > 0) {
+                mutableRequest.URL = [NSURL URLWithString:[[mutableRequest.URL absoluteString] stringByAppendingFormat:mutableRequest.URL.query ? @"&%@" : @"?%@", query]];
+            }
+        } else {
+            // #2864: an empty string is a valid x-www-form-urlencoded payload
+            if (!query) {
+                query = @"";
+            }
+            if (![mutableRequest valueForHTTPHeaderField:@"Content-Type"]) {
+                [mutableRequest setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
+            }
+            [mutableRequest setHTTPBody:[query dataUsingEncoding:self.stringEncoding]];
+        }
+
+        return mutableRequest;
+    }
 
 #pragma mark - NSKeyValueObserving
 
