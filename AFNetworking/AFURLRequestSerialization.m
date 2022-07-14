@@ -109,17 +109,28 @@ NSString * AFPercentEscapedStringFromString(NSString *string) {
     }
 }
 - (NSString *)URLEncodedStringValue:(NSStringEncoding)encode {
-        if (!self.value || [self.value isEqual:[NSNull null]]) {
-            return AFPercentEscapedStringFromString([self.field description]);
-        } else {
-            if (encode == NSUTF8StringEncoding) {
-                return [NSString stringWithFormat:@"%@=%@", AFPercentEscapedStringFromString([self.field description]), AFPercentEscapedStringFromString([self.value description])];
-            } else {
-                
-                return [NSString stringWithFormat:@"%@=%@", [self.field stringByAddingPercentEscapesUsingEncoding:encode], [self.value stringByAddingPercentEscapesUsingEncoding:encode]];
-            }
+    
+    if (!self.value || [self.value isEqual:[NSNull null]]) {
+        return AFPercentEscapedStringFromString([self.field description]);
+    } else {
+        if (encode == NSUTF8StringEncoding) {
+            return [NSString stringWithFormat:@"%@=%@", AFPercentEscapedStringFromString([self.field description]), AFPercentEscapedStringFromString([self.value description])];
+        } else if (encode == 2147485234){//gbk
+            
+            NSString *value = [[self.value stringByAddingPercentEscapesUsingEncoding:encode] stringByReplacingOccurrencesOfString:@"/" withString:@"%2F"];
+            value = [value stringByReplacingOccurrencesOfString:@"=" withString:@"%3D"];
+            value = [value stringByReplacingOccurrencesOfString:@"&" withString:@"%26"];
+            value = [value stringByReplacingOccurrencesOfString:@"?" withString:@"%3F"];
+            value = [value stringByReplacingOccurrencesOfString:@"%20" withString:@"+"];
+            value = [value stringByReplacingOccurrencesOfString:@":" withString:@"%3A"];
+            value = [value stringByReplacingOccurrencesOfString:@"%0A%" withString:@"%0D%0A%"];
+            
+            return [NSString stringWithFormat:@"%@=%@", [self.field stringByAddingPercentEscapesUsingEncoding:encode], value];
+        }else{
+            return [NSString stringWithFormat:@"%@=%@", [self.field stringByAddingPercentEscapesUsingEncoding:encode], [self.value stringByAddingPercentEscapesUsingEncoding:encode]];
         }
     }
+}
 @end
 
 #pragma mark -
